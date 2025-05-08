@@ -2,9 +2,11 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database.models.favourite import Favourite
 from src.database.models.broadcast import Broadcast
 from src.database.models.user import User
 from src.database.repo.broadcast import BroadcastRepo
+from src.database.repo.favourite import FavouriteRepo
 from src.database.repo.user import UserRepo
 
 
@@ -26,3 +28,7 @@ class RequestsRepo:
     @property
     def users(self) -> UserRepo:
         return UserRepo(model=User, session=self.session)
+
+    @property
+    def favourites(self) -> FavouriteRepo:
+        return FavouriteRepo(model=Favourite, session=self.session)

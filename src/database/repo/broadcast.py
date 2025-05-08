@@ -24,4 +24,4 @@ class BroadcastRepo(BaseRepo):
                 )
             )
         )
-        return db_obj.scalars().one_or_none()
+        return db_obj.scalar_one_or_none()

@@ -1,7 +1,7 @@
 from datetime import date
 
 from sqlalchemy import String, Date, Enum
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base
 from src.utils.enums import ReleaseType
@@ -15,7 +15,13 @@ class Broadcast(Base):
     filename: Mapped[str] = mapped_column(String(128), nullable=True)
     telegram_file_id: Mapped[str] = mapped_column(
         String(128), nullable=True
-    )  # DEFAULT_AUDIO_TITLE
+    )
     telegram_file_id_alt: Mapped[str] = mapped_column(
         String(128), nullable=True
-    )  # title
+    )
+
+    # кто добавил этот выпуск в избранное
+    favourites: Mapped[list["Favourite"]] = relationship(
+        back_populates="broadcast", cascade="all, delete-orphan"
+    )
+

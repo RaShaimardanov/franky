@@ -40,7 +40,7 @@ def get_async_session_maker(engine: AsyncEngine):
 
 
 # Инициализация движка и фабрики сессий
-engine: AsyncEngine = create_engine(url=settings.POSTGRES.POSTGRES_URI)
+engine: AsyncEngine = create_engine(url=settings.DB_URI)
 
 async_session_pool = get_async_session_maker(engine)
 

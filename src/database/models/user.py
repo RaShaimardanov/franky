@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import BIGINT, String, func, Boolean
 from sqlalchemy.dialects.postgresql import TIMESTAMP
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base
 
@@ -18,3 +18,8 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
     show_role_name: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # список объектов Favourite
+    favourites: Mapped[list["Favourite"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )

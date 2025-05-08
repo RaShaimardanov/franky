@@ -15,7 +15,6 @@ def parse_args() -> argparse.Namespace:
 
 async def main(args: argparse.Namespace) -> None:
     """Основная точка входа в приложение."""
-    print(args.parse)
     if args.parse:
         await run_parser()
     bot = setup_bot()

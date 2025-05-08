@@ -21,6 +21,7 @@ from src.bot.keyboards.user import user_setting_kb
 from src.bot.utils.callback_data import UserSettingsCallback
 from src.bot.utils.send_message import notify_admin
 from src.bot.utils.states import StateUserActions
+from src.core.config import settings
 from src.core.constants import DEFAULT_AUDIO_TITLE, DEFAULT_AUDIO_PERFORMER
 from src.core.exceptions import AudioServiceException
 from src.core.logger import logger
@@ -69,9 +70,10 @@ async def command_show_handler(
             ):
 
                 result = await service.send_audio()
+                print(result.audio.file_id)
                 if result:
+                    await state.update_data(broadcast=broadcast)
                     if not user.show_role_name:
-                        await state.update_data(broadcast=broadcast)
                         await state.set_state(StateUserActions.listen)
                     break
         except Exception as e:
@@ -86,9 +88,8 @@ async def command_test_handler(
     user: User,
     i18n: TranslatorRunner,
 ):
-
-    pass
-
+    broadcast = await repo.broadcasts.get_broadcast_by_file_id(file_id='CQACAgIAAxkDAAIEJWgcd_5lbfS5wluq9iuDtXzFy_gDAAKZYAACXGd4Sc_F0XouealKNgQ')
+    print(broadcast)
 
 @router.message(Command("settings"))
 async def command_settings_handler(
@@ -140,70 +141,88 @@ async def wait_version_message(
     await message.answer("Следующая версия!")
 
 
+# @router.message_reaction()
+# async def command_reaction_handler(
+#     event: MessageReactionUpdated,
+#     state: FSMContext,
+#     user: User,
+#     repo: RequestsRepo,
+# ) -> None:
+#     m = await event.bot.set_message_reaction(
+#         chat_id=user.telegram_id,
+#         message_id=event.message_id,
+#         reaction=[ReactionTypeEmoji(emoji="👌")],
+#     )
+#     data = await state.get_data()
+#     reaction = event.new_reaction[0].emoji
+#
+#     match reaction:
+#         case "👏":
+#             msg = await event.bot.edit_message_caption(
+#                 chat_id=user.telegram_id,
+#                 message_id=event.message_id,
+#                 caption="Добавлен в избранное",
+#             )
+#
+#         case "❤":
+#             caption = "Выпуск добавлен в избранное"
+#
+#             msg = await event.bot.edit_message_caption(
+#                 chat_id=user.telegram_id,
+#                 message_id=event.message_id,
+#                 caption=caption,
+#             )
+#
+#             broadcast = await repo.broadcasts.get_broadcast_by_file_id(
+#                 file_id=msg.audio.file_id
+#             )
+#             if user.show_role_name:
+#                 caption = (
+#                     f"Выпуск добавлен в избранное"
+#                     f"<b>{broadcast.role_name}</b> "
+#                     f"<u>{broadcast.release_date}</u>"
+#                     if user.show_role_name
+#                     else "Выпуск добавлен в избранное"
+#                 )
+#                 await msg.edit_caption(caption=caption)
+
+
+
 @router.message_reaction()
 async def command_reaction_handler(
     event: MessageReactionUpdated,
-    state: FSMContext,
+    repo: RequestsRepo,
     user: User,
-    repo: RequestsRepo,
 ) -> None:
-    m = await event.bot.set_message_reaction(
-        chat_id=user.telegram_id,
-        message_id=event.message_id,
-        reaction=[ReactionTypeEmoji(emoji="👌")],
-    )
-    data = await state.get_data()
+    """
+    Обрабатывает изменения реакций на сообщение. Если реакция добавлена или удалена,
+    выполняет соответствующие действия.
+    """
+    # message = await event.bot.forward_message(
+    #     chat_id=event.chat.id,
+    #     message_id=event.message_id,
+    #     from_chat_id=settings.TELEGRAM.ADMIN_CHAT_ID
+    # )
+    # print(message.audio.file_id)
+    # broadcast = await repo.broadcasts.get_broadcast_by_file_id(file_id=message.audio.file_id)
+    # print(broadcast)
+    # Если new_reaction пуст, значит, реакция была удалена
+    if not event.new_reaction:
+        # Можно обработать удаление реакции (если нужно)
+        caption = "Выпуск удален из избранного 👌"
+
+        msg = await event.bot.edit_message_caption(
+            chat_id=user.telegram_id,
+            message_id=event.message_id,
+            caption=caption,
+        )
+        return
+
     reaction = event.new_reaction[0].emoji
 
     match reaction:
         case "👏":
-            msg = await event.bot.edit_message_caption(
-                chat_id=user.telegram_id,
-                message_id=event.message_id,
-                caption="Добавлен в избранное",
-            )
-            print(msg.audio.file_id)
-
-        case "❤":
-            caption = "Выпуск добавлен в избранное"
-
-            msg = await event.bot.edit_message_caption(
-                chat_id=user.telegram_id,
-                message_id=event.message_id,
-                caption=caption,
-            )
-
-            broadcast = await repo.broadcasts.get_broadcast_by_file_id(
-                file_id=msg.audio.file_id
-            )
-            if user.show_role_name:
-                caption = (
-                    f"Выпуск добавлен в избранное"
-                    f"<b>{broadcast.role_name}</b> "
-                    f"<u>{broadcast.release_date}</u>"
-                    if user.show_role_name
-                    else "Выпуск добавлен в избранное"
-                )
-                await msg.edit_caption(caption=caption)
-
-            print(broadcast.role_name)
-
-
-@router.message_reaction_count()
-async def command_reaction_handler2(
-    event: Message,
-    repo: RequestsRepo,
-    state: FSMContext,
-) -> None:
-
-    data = await state.get_data()
-    reaction = event.new_reaction[0].emoji
-    message: Message = data["message"]
-    broadcast = data["broadcast"]
-
-    match reaction:
-        case "👏":
-
+            # Обработка добавления реакции "👏"
             await message.edit_media(
                 media=InputMediaAudio(
                     media=broadcast.telegram_file_id,
@@ -213,7 +232,15 @@ async def command_reaction_handler2(
                 reply_markup=None,
             )
         case "❤":
-            await message.bot.send_message(
-                text=f"<b>{broadcast.role_name}</b> добавлен в избранное",
-                chat_id=message.chat.id,
-            )
+            # Обработка добавления реакции "❤"
+            caption = "Выпуск добавлен в избранное 👌"
+
+            msg = await event.bot.edit_message_caption(
+                        chat_id=user.telegram_id,
+                        message_id=event.message_id,
+                        caption=caption,
+                    )
+            print(msg.audio.file_id)
+            print(type(msg.audio.file_id))
+            broadcast = await repo.broadcasts.get_broadcast_by_file_id(file_id=msg.audio.file_id)
+            print(broadcast)
