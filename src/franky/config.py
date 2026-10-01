@@ -30,7 +30,10 @@ class GameSettings(BaseModel):
     max_hints: int = 2
 
 
-_ENV_CONFIG = SettingsConfigDict(env_file=".env", env_nested_delimiter="__", extra="ignore")
+# env_ignore_empty: пустая переменная (Coolify передаёт незаполненные как "") = не задана.
+_ENV_CONFIG = SettingsConfigDict(
+    env_file=".env", env_nested_delimiter="__", env_ignore_empty=True, extra="ignore"
+)
 
 
 class Settings(BaseSettings):
