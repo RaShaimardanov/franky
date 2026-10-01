@@ -38,6 +38,10 @@ services:
     # Coolify считал бы «упавшим».
     command: ["sh", "-c", "alembic upgrade head && exec franky bot"]
     environment: *app-env
+    # На российском хостинге основной IPv4 api.telegram.org недоступен, а IPv6 в контейнерах
+    # нет. Направляем на другой официальный адрес Bot API (TLS проверяется по имени как обычно).
+    extra_hosts:
+      - "api.telegram.org:${TELEGRAM_API_IP:-149.154.167.220}"
     volumes:
       - audio:/app/data/audio
     depends_on:
