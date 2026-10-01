@@ -2,7 +2,8 @@
 
 franky bot                    запустить бота (long polling)
 franky sync                   обновить каталог выпусков с fshow.info
-franky download [--limit N]   докачать mp3 для выпусков без файла
+franky download [--limit N]   докачать mp3 для выпусков без файла (большие сразу сжимаются)
+franky compress               сжать уже скачанные mp3 больше лимита Bot API (50 МБ)
 franky upload                 заранее залить аудио в Telegram и сохранить file_id
 """
 
@@ -57,20 +58,28 @@ async def run_download(
     log.info("download_finished", downloaded=done)
 
 
+async def run_compress(
+    settings: Settings, session_factory: SessionFactory, _: argparse.Namespace
+) -> None:
+    from franky.catalog.compress import compress_oversized
+
+    done = await compress_oversized(settings.catalog.audio_dir)
+    log.info("compress_finished", compressed=done)
+
+
 async def run_upload(
     settings: Settings, session_factory: SessionFactory, _: argparse.Namespace
 ) -> None:
     """Загружает аудио в служебный чат, чтобы игроки получали выпуски мгновенно."""
-    from franky.bot.app import create_bot
+    from franky.bot.app import create_audio_sender, create_bot
     from franky.db.repositories import Repos
-    from franky.services.audio import AudioSender
 
     chat_id = settings.bot.storage_chat_id
     if chat_id is None:
         raise SystemExit("Задайте BOT__STORAGE_CHAT_ID — чат, куда бот может отправлять файлы")
 
     async with create_bot(settings) as bot:
-        sender = AudioSender(bot, settings.catalog.audio_dir)
+        sender = create_audio_sender(settings, bot)
         async with session_factory() as session:
             pending = await Repos(session).episodes.without_file_id()
         for episode in pending:
@@ -91,6 +100,7 @@ COMMANDS: dict[str, Command] = {
     "bot": run_bot,
     "sync": run_sync,
     "download": run_download,
+    "compress": run_compress,
     "upload": run_upload,
 }
 
@@ -102,6 +112,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sub.add_parser("sync", help="обновить каталог выпусков с сайта")
     download = sub.add_parser("download", help="докачать недостающие mp3")
     download.add_argument("--limit", type=int, default=None, help="не больше N файлов")
+    sub.add_parser("compress", help="сжать mp3 больше 50 МБ")
     sub.add_parser("upload", help="заранее загрузить аудио в Telegram")
     return parser.parse_args(argv)
 

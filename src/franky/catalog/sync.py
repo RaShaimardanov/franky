@@ -9,6 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from franky.catalog.client import FshowClient
+from franky.catalog.compress import compress, needs_compression
 from franky.catalog.parser import ListingEntry
 from franky.db.models import Character, Episode, EpisodeKind
 from franky.db.repositories import build_search_text
@@ -125,7 +126,10 @@ async def download_missing(
         try:
             if not target.is_file():
                 await client.download(site_id, target)
+            if needs_compression(target):
+                await compress(target)
         except Exception:
+            # Файл, который не скачался или не сжался до лимита Bot API, в игру не попадает.
             log.exception("episode_download_failed", site_id=site_id)
             continue
         async with session_factory() as session, session.begin():

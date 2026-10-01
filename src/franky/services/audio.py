@@ -15,6 +15,7 @@ log = structlog.get_logger(__name__)
 AUDIO_TITLE = "Кто я?"
 AUDIO_PERFORMER = "Фрэнки-шоу"
 AUDIO_FILENAME = "franky-show.mp3"
+UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024  # лимит облачного Bot API на загрузку файлов
 
 
 class AudioUnavailableError(Exception):
@@ -22,9 +23,13 @@ class AudioUnavailableError(Exception):
 
 
 class AudioSender:
-    def __init__(self, bot: Bot, audio_dir: Path) -> None:
+    def __init__(
+        self, bot: Bot, audio_dir: Path, *, upload_limit: int | None = UPLOAD_LIMIT_BYTES
+    ) -> None:
+        """upload_limit=None — для своего Bot API сервера, где ограничения 50 МБ нет."""
         self._bot = bot
         self._audio_dir = audio_dir
+        self._upload_limit = upload_limit
 
     async def send(
         self,
@@ -61,4 +66,8 @@ class AudioSender:
         path = self._audio_dir / episode.audio_file if episode.audio_file else None
         if path is None or not path.is_file():
             raise AudioUnavailableError(f"Нет аудиофайла для выпуска {episode.id}")
+        if self._upload_limit is not None and path.stat().st_size > self._upload_limit:
+            raise AudioUnavailableError(
+                f"{path.name} больше 50 МБ: выполните `franky compress` или задайте BOT__API_SERVER"
+            )
         return FSInputFile(path, filename=AUDIO_FILENAME)

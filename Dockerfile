@@ -19,6 +19,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.13-slim
 
+# ffmpeg — для сжатия выпусков больше лимита Bot API (`franky compress`).
+RUN apt-get update     && apt-get install -y --no-install-recommends ffmpeg     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 1000 franky
 WORKDIR /app
 COPY --from=builder --chown=franky:franky /app/.venv /app/.venv
