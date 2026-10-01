@@ -1,28 +1,62 @@
-[tool.poetry]
+[project]
 name = "franky"
-version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+version = "2.0.0"
+description = "Telegram-бот «Фрэнки-шоу»: слушай выпуск и угадывай, чью жизнь прожил ведущий"
 readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.22,<4",
+    "sqlalchemy[asyncio]>=2.0.36,<2.1",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic-settings>=2.7",
+    "httpx>=0.28",
+    "beautifulsoup4>=4.12",
+    "rapidfuzz>=3.10",
+    "structlog>=24.4",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-aiogram = "^3.15.0"
-sqlalchemy = "^2.0.36"
-alembic = "^1.14.0"
-pydantic-settings = "^2.7.0"
-black = "^24.10.0"
-aiosqlite = "^0.20.0"
-selenium = "^4.27.1"
-webdriver-manager = "^4.0.2"
-progress = "^1.6"
-tqdm = "^4.67.1"
-argparse = "^1.4.0"
-fluentogram = "^1.1.10"
-psycopg2 = "^2.9.10"
-asyncpg = "^0.30.0"
+[project.scripts]
+franky = "franky.__main__:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "respx>=0.22",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/franky"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "ASYNC", "RUF", "N", "C4", "PT", "RET"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # кириллица в строках и комментариях — норма
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["bs4.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["src"]

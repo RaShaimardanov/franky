@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: franky
+          POSTGRES_PASSWORD: franky
+          POSTGRES_DB: franky_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U franky" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      TEST_DB_DSN: postgresql+asyncpg://franky:franky@localhost:5432/franky_test
+      DB__DSN: postgresql+asyncpg://franky:franky@localhost:5432/franky_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - run: uv run ruff format --check src/franky tests
+      - run: uv run ruff check src/franky tests
+      - run: uv run mypy -p franky
+      - run: uv run alembic upgrade head && uv run alembic check
+      - run: uv run pytest
