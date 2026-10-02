@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.methods import (
     AnswerCallbackQuery,
     AnswerInlineQuery,
@@ -16,6 +17,7 @@ from aiogram.methods import (
     SendAudio,
     SendMessage,
     SendPhoto,
+    SetMyCommands,
     TelegramMethod,
 )
 from aiogram.methods.base import TelegramType
@@ -280,3 +282,11 @@ async def test_quote_hint_and_content_search(harness: Harness, session: AsyncSes
     calls = await harness.text("лампа")
     [found] = of(calls, SendMessage)
     assert found.text == texts.CONTENT_RESULTS
+
+
+async def test_startup_survives_telegram_network_error(harness: Harness) -> None:
+    async def broken(*_: Any, **__: Any) -> Any:
+        raise TelegramNetworkError(method=SetMyCommands(commands=[]), message="Request timeout")
+
+    harness.api.make_request = broken  # type: ignore[method-assign]
+    await harness.dp.emit_startup(bot=harness.bot)  # не должно бросить исключение

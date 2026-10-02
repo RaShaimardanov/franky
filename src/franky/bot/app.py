@@ -1,8 +1,10 @@
+import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import BotCommand
 
 from franky.bot import texts
@@ -11,6 +13,8 @@ from franky.bot.middlewares import DatabaseMiddleware
 from franky.config import Settings
 from franky.db.session import SessionFactory
 from franky.services.audio import UPLOAD_LIMIT_BYTES, AudioSender
+
+log = structlog.get_logger(__name__)
 
 COMMANDS = [
     BotCommand(command="play", description="В какой роли я сегодня? Новая загадка"),
@@ -57,8 +61,12 @@ def create_dispatcher(settings: Settings, session_factory: SessionFactory, bot: 
     dp.include_router(build_router())
 
     async def on_startup(bot: Bot) -> None:
-        await bot.set_my_commands(COMMANDS)
-        await sync_profile(bot)
+        # Меню и описание — не критичны: сбой сети к Telegram не должен ронять бота.
+        try:
+            await bot.set_my_commands(COMMANDS)
+            await sync_profile(bot)
+        except TelegramAPIError:
+            log.warning("profile_sync_failed", exc_info=True)
 
     dp.startup.register(on_startup)
     return dp
