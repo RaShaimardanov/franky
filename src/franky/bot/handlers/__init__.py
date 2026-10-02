@@ -1,7 +1,7 @@
 from aiogram import F, Router
 from aiogram.enums import ChatType
 
-from franky.bot.handlers import archive, common, game
+from franky.bot.handlers import archive, catalog, common, game
 
 
 def build_router() -> Router:
@@ -10,5 +10,10 @@ def build_router() -> Router:
     # Бот рассчитан на личные чаты; inline-поиск работает где угодно.
     root.message.filter(F.chat.type == ChatType.PRIVATE)
     # Порядок важен: в archive последним стоит обработчик произвольного текста.
-    root.include_routers(common.create_router(), game.create_router(), archive.create_router())
+    root.include_routers(
+        common.create_router(),
+        game.create_router(),
+        catalog.create_router(),
+        archive.create_router(),
+    )
     return root

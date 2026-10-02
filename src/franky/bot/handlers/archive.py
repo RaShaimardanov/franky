@@ -17,6 +17,7 @@ from aiogram.utils.chat_action import ChatActionSender
 from franky.bot import keyboards, texts
 from franky.bot.callbacks import CharacterCb, EpisodeCb, FavCb, FavPageCb
 from franky.bot.handlers.game import handle_guess
+from franky.db.models import Character
 from franky.db.repositories import Repos
 from franky.services.audio import AudioSender, AudioUnavailableError
 from franky.services.game import GameService
@@ -27,16 +28,26 @@ MAX_QUERY = 64
 
 
 async def inline_search(query: InlineQuery, repos: Repos) -> None:
-    """Подсказки имён по мере ввода. Выбранное имя уходит в чат обычным сообщением —
-    во время игры оно считается ответом, вне игры открывает карточку персонажа."""
+    """Подсказки имён по мере ввода. Выбранное имя уходит в чат обычным сообщением.
+
+    Обычный режим («🔎 Угадать»): во время игры имя — это ответ, вне игры — поиск.
+    Режим каталога (запрос начинается с «каталог: »): к имени добавляется метка 📚,
+    и такое сообщение всегда открывает карточку персонажа, а не засчитывается как ответ.
+    """
+    text = query.query
+    in_catalog = text.lower().startswith(texts.CATALOG_INLINE_PREFIX.strip())
+    if in_catalog:
+        text = text[len(texts.CATALOG_INLINE_PREFIX.strip()) :]
+    mark = texts.CATALOG_MARK if in_catalog else ""
+
     offset = int(query.offset or 0)
-    found = await repos.characters.search(query.query[:MAX_QUERY], limit=INLINE_PAGE, offset=offset)
+    found = await repos.characters.search(text[:MAX_QUERY], limit=INLINE_PAGE, offset=offset)
     results = [
         InlineQueryResultArticle(
-            id=str(character.id),
+            id=f"{'c' if in_catalog else 'g'}{character.id}",
             title=character.name,
             description=character.description,
-            input_message_content=InputTextMessageContent(message_text=character.name),
+            input_message_content=InputTextMessageContent(message_text=mark + character.name),
         )
         for character in found
     ]
@@ -51,12 +62,13 @@ async def inline_search(query: InlineQuery, repos: Repos) -> None:
 async def show_character(callback: CallbackQuery, callback_data: CharacterCb, repos: Repos) -> None:
     character = await repos.characters.get(callback_data.character_id)
     await callback.answer()
-    if character is None or not isinstance(callback.message, Message):
-        return
-    episodes = sorted(character.episodes, key=lambda e: e.site_id)
-    await callback.message.answer(
-        texts.character_card(character), reply_markup=keyboards.episodes(episodes)
-    )
+    if character is not None and isinstance(callback.message, Message):
+        await _send_card(callback.message, character)
+
+
+async def _send_card(message: Message, character: Character) -> None:
+    episodes = sorted(character.episodes, key=lambda e: (e.aired_year or 0, e.site_id))
+    await message.answer(texts.character_card(character), reply_markup=keyboards.episodes(episodes))
 
 
 async def play_episode(
@@ -147,6 +159,13 @@ async def noop(callback: CallbackQuery) -> None:
 async def free_text(message: Message, repos: Repos, game: GameService) -> None:
     """Любой текст: ответ на загадку, если она идёт, иначе — поиск по архиву."""
     assert message.text
+    if message.text.startswith(texts.CATALOG_MARK):  # выбрано в поиске по каталогу
+        name = message.text.removeprefix(texts.CATALOG_MARK).strip()
+        found_exact = await repos.characters.find_exact(name)
+        if found_exact and (character := await repos.characters.get(found_exact.id)):
+            await _send_card(message, character)
+            return
+
     query = message.text.strip()[:MAX_QUERY]
     if await handle_guess(message, query, game, repos):
         return

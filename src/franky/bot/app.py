@@ -13,6 +13,7 @@ from franky.services.audio import UPLOAD_LIMIT_BYTES, AudioSender
 
 COMMANDS = [
     BotCommand(command="play", description="Новая загадка"),
+    BotCommand(command="catalog", description="Каталог выпусков"),
     BotCommand(command="favourites", description="Избранные выпуски"),
     BotCommand(command="stats", description="Моя статистика"),
     BotCommand(command="top", description="Рейтинг знатоков"),

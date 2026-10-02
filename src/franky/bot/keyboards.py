@@ -9,14 +9,23 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from franky.bot import texts
-from franky.bot.callbacks import CharacterCb, EpisodeCb, FavCb, FavPageCb, GameAct, GameCb
+from franky.bot.callbacks import (
+    CatalogCb,
+    CharacterCb,
+    EpisodeCb,
+    FavCb,
+    FavPageCb,
+    GameAct,
+    GameCb,
+)
 from franky.db.models import Character, Episode
+from franky.domain.catalog import IndexEntry
 
 
 def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=texts.BTN_PLAY)],
+            [KeyboardButton(text=texts.BTN_PLAY), KeyboardButton(text=texts.BTN_CATALOG)],
             [
                 KeyboardButton(text=texts.BTN_FAVOURITES),
                 KeyboardButton(text=texts.BTN_STATS),
@@ -99,3 +108,54 @@ def favourites(items: Sequence[Episode], *, page: int, pages: int) -> InlineKeyb
 
 def fav_label(is_favourite: bool) -> str:
     return "★ В избранном" if is_favourite else "☆ В избранное"
+
+
+def catalog_search_button() -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text="🔎 Найти в каталоге", switch_inline_query_current_chat=texts.CATALOG_INLINE_PREFIX
+    )
+
+
+def catalog_letters(letters: Sequence[str]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for letter in letters:
+        kb.button(text=letter, callback_data=CatalogCb(letter=letter))
+    kb.adjust(6)
+    kb.row(catalog_search_button())
+    return kb.as_markup()
+
+
+def catalog_page(
+    entries: Sequence[IndexEntry[Character]], *, letter: str, page: int, pages: int
+) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for entry in entries:
+        count = len(entry.item.episodes)
+        title = f"{entry.title} ({count})" if count > 1 else entry.title
+        kb.row(
+            InlineKeyboardButton(
+                text=title, callback_data=CharacterCb(character_id=entry.item.id).pack()
+            )
+        )
+    nav = []
+    if page > 0:
+        nav.append(
+            InlineKeyboardButton(
+                text="◀️", callback_data=CatalogCb(letter=letter, page=page - 1).pack()
+            )
+        )
+    if pages > 1:
+        nav.append(InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data="noop"))
+    if page < pages - 1:
+        nav.append(
+            InlineKeyboardButton(
+                text="▶️", callback_data=CatalogCb(letter=letter, page=page + 1).pack()
+            )
+        )
+    if nav:
+        kb.row(*nav)
+    kb.row(
+        InlineKeyboardButton(text="🔤 Все буквы", callback_data=CatalogCb().pack()),
+        catalog_search_button(),
+    )
+    return kb.as_markup()

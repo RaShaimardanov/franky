@@ -28,3 +28,8 @@ class CharacterCb(CallbackData, prefix="c"):
 
 class FavPageCb(CallbackData, prefix="fp"):
     page: int
+
+
+class CatalogCb(CallbackData, prefix="cat"):
+    letter: str = ""  # пусто — оглавление по буквам
+    page: int = 0

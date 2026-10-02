@@ -9,6 +9,12 @@ BTN_PLAY = "🎧 Новая загадка"
 BTN_FAVOURITES = "⭐ Избранное"
 BTN_STATS = "📊 Статистика"
 BTN_TOP = "🏆 Рейтинг"
+BTN_CATALOG = "📚 Каталог"
+
+# Метка сообщения, выбранного в поиске по каталогу: такое сообщение открывает карточку
+# персонажа и никогда не считается ответом на загадку.
+CATALOG_MARK = "📚 "
+CATALOG_INLINE_PREFIX = "каталог: "
 
 START = (
     "Привет! Это архив <b>«Фрэнки-шоу»</b> (2004–2011).\n\n"
@@ -45,6 +51,21 @@ def start(attempts: int) -> str:
 
 def game_caption(attempts: int) -> str:
     return GAME_CAPTION.format(attempts=attempts)
+
+
+def catalog_index(characters: int, episodes: int) -> str:
+    return (
+        "📚 <b>Каталог «Фрэнки-шоу»</b>\n"
+        f"{characters} {plural(characters, 'персонаж', 'персонажа', 'персонажей')}, "
+        f"{episodes} {plural(episodes, 'выпуск', 'выпуска', 'выпусков')}.\n\n"
+        "Выбери букву фамилии или найди по имени. Выпуски в каталоге — с ответом, "
+        "так что тут можно спойлернуть себе загадку 🙂"
+    )
+
+
+def catalog_letter(letter: str, count: int, page: int, pages: int) -> str:
+    tail = f" · стр. {page + 1}/{pages}" if pages > 1 else ""
+    return f"📚 <b>{escape(letter)}</b> — {count}{tail}"
 
 
 def search_empty(query: str) -> str:
@@ -131,9 +152,13 @@ def leaderboard(rows: list[LeaderboardRow], me: int) -> str:
     return "\n".join(lines)
 
 
-def _points(n: int) -> str:
+def plural(n: int, one: str, few: str, many: str) -> str:
     if n % 10 == 1 and n % 100 != 11:
-        return "очко"
+        return one
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return "очка"
-    return "очков"
+        return few
+    return many
+
+
+def _points(n: int) -> str:
+    return plural(n, "очко", "очка", "очков")

@@ -65,6 +65,11 @@ class CharacterRepo:
         )
         return (await self.session.scalars(stmt)).first()
 
+    async def list_all(self) -> Sequence[Character]:
+        """Все персонажи с выпусками — для алфавитного указателя (их пара сотен)."""
+        stmt = select(Character).options(selectinload(Character.episodes))
+        return (await self.session.scalars(stmt)).all()
+
     async def search(self, query: str, *, limit: int = 20, offset: int = 0) -> Sequence[Character]:
         """Нечёткий поиск по всем вариантам имени (pg_trgm) с приоритетом совпадения по префиксу."""
         q = normalize(query)

@@ -12,6 +12,7 @@ from aiogram.methods import (
     AnswerCallbackQuery,
     AnswerInlineQuery,
     EditMessageReplyMarkup,
+    EditMessageText,
     SendAudio,
     SendMessage,
     TelegramMethod,
@@ -30,7 +31,7 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from franky.bot.app import create_dispatcher
-from franky.bot.callbacks import FavCb, GameAct, GameCb
+from franky.bot.callbacks import CatalogCb, FavCb, GameAct, GameCb
 from franky.catalog.parser import ListingEntry
 from franky.catalog.sync import upsert_entries
 from franky.config import BotSettings, CatalogSettings, Settings
@@ -210,3 +211,32 @@ async def test_unknown_callback_does_not_crash(harness: Harness) -> None:
     [answer] = of(calls, AnswerCallbackQuery)
     assert answer.show_alert
     assert of(calls, EditMessageReplyMarkup) == []
+
+
+async def test_catalog_browse_and_search(harness: Harness) -> None:
+    calls = await harness.text("📚 Каталог")
+    [index] = of(calls, SendMessage)
+    assert "1 персонаж, 1 выпуск" in index.text
+    buttons = [b for row in index.reply_markup.inline_keyboard for b in row]
+    assert [b.text for b in buttons][:1] == ["М"]
+
+    calls = await harness.press(CatalogCb(letter="М").pack())
+    [page] = of(calls, EditMessageText)
+    first = page.reply_markup.inline_keyboard[0][0]
+    assert first.text == "Маяковский Владимир Владимирович"
+
+    calls = await harness.inline("каталог: маяк")
+    [answer] = of(calls, AnswerInlineQuery)
+    assert answer.results[0].input_message_content.message_text == (
+        "📚 Владимир Владимирович Маяковский"
+    )
+
+
+async def test_catalog_pick_during_game_is_not_a_guess(harness: Harness) -> None:
+    await harness.text("/play")
+    calls = await harness.text("📚 Владимир Владимирович Маяковский")
+    [card] = of(calls, SendMessage)
+    assert "Выпусков в архиве: 1" in card.text  # карточка, а не «Верно!»
+
+    calls = await harness.text("/stats")
+    assert "Загадок: 0" in of(calls, SendMessage)[0].text  # загадка всё ещё не решена
