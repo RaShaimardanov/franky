@@ -161,8 +161,8 @@ async def test_full_game_round(harness: Harness) -> None:
 
     calls = await harness.text(texts.BTN_PLAY)
     [audio] = of(calls, SendAudio)
-    assert "Кто я сегодня?" in (audio.caption or "")
-    assert audio.title == "Кто я?"  # метаданные не выдают ответ
+    assert "В какой роли я сегодня?" in (audio.caption or "")
+    assert audio.title == "В какой роли я сегодня?"  # метаданные не выдают ответ
     assert audio.performer == "Фрэнки-шоу"
 
     # Расшифровки нет — первая подсказка сразу год эфира.

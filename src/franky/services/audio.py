@@ -12,7 +12,7 @@ from franky.db.models import Episode
 log = structlog.get_logger(__name__)
 
 # Метаданные одинаковые для всех выпусков, чтобы плеер не выдавал ответ.
-AUDIO_TITLE = "Кто я?"
+AUDIO_TITLE = "В какой роли я сегодня?"
 AUDIO_PERFORMER = "Фрэнки-шоу"
 AUDIO_FILENAME = "franky-show.mp3"
 UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024  # лимит облачного Bot API на загрузку файлов

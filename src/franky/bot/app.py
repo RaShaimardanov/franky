@@ -13,7 +13,7 @@ from franky.db.session import SessionFactory
 from franky.services.audio import UPLOAD_LIMIT_BYTES, AudioSender
 
 COMMANDS = [
-    BotCommand(command="play", description="Кто я сегодня? Новая роль"),
+    BotCommand(command="play", description="В какой роли я сегодня? Новая загадка"),
     BotCommand(command="catalog", description="Звёздная коллекция ролей"),
     BotCommand(command="favourites", description="Ваша личная коллекция"),
     BotCommand(command="stats", description="Мой диагноз"),
