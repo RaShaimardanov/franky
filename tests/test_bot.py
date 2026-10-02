@@ -15,6 +15,7 @@ from aiogram.methods import (
     EditMessageText,
     SendAudio,
     SendMessage,
+    SendPhoto,
     TelegramMethod,
 )
 from aiogram.methods.base import TelegramType
@@ -25,17 +26,20 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineQuery,
     Message,
+    PhotoSize,
     Update,
     User,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from franky.bot import texts
 from franky.bot.app import create_dispatcher
 from franky.bot.callbacks import CatalogCb, FavCb, GameAct, GameCb
 from franky.catalog.parser import ListingEntry
 from franky.catalog.sync import upsert_entries
 from franky.config import BotSettings, CatalogSettings, Settings
 from franky.db.models import EpisodeKind
+from franky.db.repositories import Repos
 
 USER = User(id=777, is_bot=False, first_name="Тестер", language_code="ru")
 CHAT = Chat(id=USER.id, type="private")
@@ -56,18 +60,21 @@ class FakeSession(BaseSession):
         timeout: int | None = None,  # noqa: ASYNC109 — сигнатура задана BaseSession
     ) -> TelegramType:
         self.calls.append(method)
-        if isinstance(method, SendMessage | SendAudio):
+        if isinstance(method, SendMessage | SendAudio | SendPhoto):
             self._next_id += 1
-            audio = None
+            audio = photo = None
             markup = method.reply_markup
             if isinstance(method, SendAudio):
                 audio = Audio(file_id=f"file-{self._next_id}", file_unique_id="u", duration=60)
+            if isinstance(method, SendPhoto):
+                photo = [PhotoSize(file_id="photo-1", file_unique_id="p", width=1, height=1)]
             return Message(  # type: ignore[return-value]
                 message_id=self._next_id,
                 date=datetime.now(UTC),
                 chat=CHAT,
                 text=getattr(method, "text", None),
                 audio=audio,
+                photo=photo,
                 reply_markup=markup if isinstance(markup, InlineKeyboardMarkup) else None,
             )
         return True  # type: ignore[return-value]
@@ -146,39 +153,46 @@ def of(calls: list[TelegramMethod[Any]], kind: type[Any]) -> list[Any]:
 
 async def test_full_game_round(harness: Harness) -> None:
     calls = await harness.text("/start")
-    assert "Фрэнки-шоу" in of(calls, SendMessage)[0].text
+    [welcome] = of(calls, SendPhoto)
+    assert "«Фрэнки-шоу»" in (welcome.caption or "")
+    assert len(welcome.caption or "") <= 1024  # лимит подписи к фото
+    calls = await harness.text("/start")  # картинка повторно уходит по file_id
+    assert of(calls, SendPhoto)[0].photo == "photo-1"
 
-    calls = await harness.text("/play")
+    calls = await harness.text(texts.BTN_PLAY)
     [audio] = of(calls, SendAudio)
-    assert "Кто это?" in (audio.caption or "")
+    assert "Кто я сегодня?" in (audio.caption or "")
     assert audio.title == "Кто я?"  # метаданные не выдают ответ
     assert audio.performer == "Фрэнки-шоу"
 
+    # Расшифровки нет — первая подсказка сразу год эфира.
     calls = await harness.press(GameCb(act=GameAct.HINT).pack())
     assert "2009" in of(calls, SendMessage)[0].text
 
     calls = await harness.text("Есенин")
-    assert "Нет, это не Есенин" in of(calls, SendMessage)[0].text
+    wrong = of(calls, SendMessage)[0].text
+    assert "Есенин" in wrong
+    assert "Осталось: 2 попытки" in wrong
 
     calls = await harness.text("<b>Есенин</b>")  # пользовательский текст экранируется
     assert "&lt;b&gt;" in of(calls, SendMessage)[0].text
 
     calls = await harness.text("маяковкий!")  # опечатка прощается
     reveal = of(calls, SendMessage)[0]
-    assert "Верно" in reveal.text
+    assert "Шоу-тайм" in reveal.text
     assert "Владимир Владимирович Маяковский" in reveal.text
 
     # Второй раз файл уже не грузится — используется сохранённый file_id.
     await harness.text("/play")
     calls = await harness.press(GameCb(act=GameAct.SURRENDER).pack())
-    assert "Ответ" in of(calls, SendMessage)[0].text
+    assert "Сдаётесь" in of(calls, SendMessage)[0].text
     calls = await harness.text("/play")
     [audio] = of(calls, SendAudio)
     assert isinstance(audio.audio, str)
     assert audio.audio.startswith("file-")
 
-    calls = await harness.text("/stats")
-    assert "Угадано: 1" in of(calls, SendMessage)[0].text
+    calls = await harness.text(texts.BTN_STATS)
+    assert "Разгадано: 1" in of(calls, SendMessage)[0].text
 
 
 async def test_favourite_toggle_updates_button(harness: Harness) -> None:
@@ -187,10 +201,10 @@ async def test_favourite_toggle_updates_button(harness: Harness) -> None:
 
     origin_markup = FavCb(episode_id=1).pack()
     calls = await harness.press(origin_markup)
-    assert of(calls, AnswerCallbackQuery)[0].text == "Добавлено в избранное ⭐"
+    assert of(calls, AnswerCallbackQuery)[0].text == texts.FAV_ADDED
 
-    calls = await harness.text("/favourites")
-    assert "Избранное</b> (1)" in of(calls, SendMessage)[0].text
+    calls = await harness.text(texts.BTN_FAVOURITES)
+    assert "коллекция ролей</b> (1)" in of(calls, SendMessage)[0].text
 
 
 async def test_search_inline_and_text(harness: Harness) -> None:
@@ -203,7 +217,7 @@ async def test_search_inline_and_text(harness: Harness) -> None:
     assert found.reply_markup.inline_keyboard[0][0].text == "Владимир Владимирович Маяковский"
 
     calls = await harness.text("абракадабра")
-    assert "Никого не нашлось" in of(calls, SendMessage)[0].text
+    assert "Такой роли в моей коллекции нет" in of(calls, SendMessage)[0].text
 
 
 async def test_unknown_callback_does_not_crash(harness: Harness) -> None:
@@ -214,9 +228,9 @@ async def test_unknown_callback_does_not_crash(harness: Harness) -> None:
 
 
 async def test_catalog_browse_and_search(harness: Harness) -> None:
-    calls = await harness.text("📚 Каталог")
+    calls = await harness.text(texts.BTN_CATALOG)
     [index] = of(calls, SendMessage)
-    assert "1 персонаж, 1 выпуск" in index.text
+    assert "1 роль, 1 выпуск" in index.text
     buttons = [b for row in index.reply_markup.inline_keyboard for b in row]
     assert [b.text for b in buttons][:1] == ["М"]
 
@@ -239,4 +253,30 @@ async def test_catalog_pick_during_game_is_not_a_guess(harness: Harness) -> None
     assert "Выпусков в архиве: 1" in card.text  # карточка, а не «Верно!»
 
     calls = await harness.text("/stats")
-    assert "Загадок: 0" in of(calls, SendMessage)[0].text  # загадка всё ещё не решена
+    assert "Ролей послушано: 0" in of(calls, SendMessage)[0].text  # загадка всё ещё идёт
+
+
+async def test_quote_hint_and_content_search(harness: Harness, session: AsyncSession) -> None:
+    quote = "Недаром же я родился летом, шутили мои родители, глядя на рыжего сына."
+    text = f"В этом выпуске про джинна и лампу. {quote}"
+    await Repos(session).transcripts.upsert(1, text, [quote])
+    await session.commit()
+
+    await harness.text("/play")
+    calls = await harness.press(GameCb(act=GameAct.HINT).pack())
+    assert quote in of(calls, SendMessage)[0].text  # первая подсказка — цитата
+    calls = await harness.press(GameCb(act=GameAct.HINT).pack())
+    assert "2009" in of(calls, SendMessage)[0].text  # затем год
+
+    # Поиск по содержанию: в каталоге (inline) и обычным текстом вне игры.
+    calls = await harness.inline("каталог: джинн")
+    [answer] = of(calls, AnswerInlineQuery)
+    content = [r for r in answer.results if r.id.startswith("t")]
+    assert content
+    assert "джинна" in content[0].description
+    assert content[0].input_message_content.message_text == "📚 Владимир Владимирович Маяковский"
+
+    await harness.press(GameCb(act=GameAct.SURRENDER).pack())
+    calls = await harness.text("лампа")
+    [found] = of(calls, SendMessage)
+    assert found.text == texts.CONTENT_RESULTS

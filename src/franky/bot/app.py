@@ -5,6 +5,7 @@ from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 
+from franky.bot import texts
 from franky.bot.handlers import build_router
 from franky.bot.middlewares import DatabaseMiddleware
 from franky.config import Settings
@@ -12,12 +13,12 @@ from franky.db.session import SessionFactory
 from franky.services.audio import UPLOAD_LIMIT_BYTES, AudioSender
 
 COMMANDS = [
-    BotCommand(command="play", description="Новая загадка"),
-    BotCommand(command="catalog", description="Каталог выпусков"),
-    BotCommand(command="favourites", description="Избранные выпуски"),
-    BotCommand(command="stats", description="Моя статистика"),
-    BotCommand(command="top", description="Рейтинг знатоков"),
-    BotCommand(command="help", description="Как играть"),
+    BotCommand(command="play", description="Кто я сегодня? Новая роль"),
+    BotCommand(command="catalog", description="Звёздная коллекция ролей"),
+    BotCommand(command="favourites", description="Ваша личная коллекция"),
+    BotCommand(command="stats", description="Мой диагноз"),
+    BotCommand(command="top", description="Самые проницательные слушатели"),
+    BotCommand(command="help", description="Правила шоу"),
 ]
 
 
@@ -30,6 +31,15 @@ def create_bot(settings: Settings) -> Bot:
         session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True),
     )
+
+
+async def sync_profile(bot: Bot) -> None:
+    """Описание бота в профиле; обновляем, только если текст изменился (лимиты Telegram)."""
+    if (await bot.get_my_description()).description != texts.BOT_DESCRIPTION:
+        await bot.set_my_description(texts.BOT_DESCRIPTION)
+    short = await bot.get_my_short_description()
+    if short.short_description != texts.BOT_SHORT_DESCRIPTION:
+        await bot.set_my_short_description(texts.BOT_SHORT_DESCRIPTION)
 
 
 def create_audio_sender(settings: Settings, bot: Bot) -> AudioSender:
@@ -48,6 +58,7 @@ def create_dispatcher(settings: Settings, session_factory: SessionFactory, bot: 
 
     async def on_startup(bot: Bot) -> None:
         await bot.set_my_commands(COMMANDS)
+        await sync_profile(bot)
 
     dp.startup.register(on_startup)
     return dp

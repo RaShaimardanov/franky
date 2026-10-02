@@ -78,8 +78,8 @@ async def test_game_win_flow(session: AsyncSession, tmp_path: Path) -> None:
     assert again.game.id == started.game.id
 
     hint = await game.hint(USER_ID)
-    assert hint.text is not None
-    assert hint.hints_left == 1
+    assert hint.hint is not None
+    assert hint.hints_left == 1  # без расшифровки: год → буква, лимит 2
 
     wrong = await game.guess(USER_ID, "Кто-то другой")
     assert wrong.outcome is GuessOutcome.WRONG
@@ -108,7 +108,7 @@ async def test_game_lose_and_surrender(session: AsyncSession, tmp_path: Path) ->
     game = GameService(repos, GameSettings(max_attempts=2, max_hints=0))
 
     await game.start(USER_ID)
-    assert (await game.hint(USER_ID)).text is None
+    assert (await game.hint(USER_ID)).hint is None
     assert (await game.guess(USER_ID, "нет")).outcome is GuessOutcome.WRONG
     lost = await game.guess(USER_ID, "опять нет")
     assert lost.outcome is GuessOutcome.LOST

@@ -49,7 +49,7 @@ async def _start_game(
         await message.answer(texts.GAME_ALREADY_ACTIVE)
 
     attempts_left = settings.game.max_attempts - started.game.attempts
-    hints_left = started.game.hints_used < settings.game.max_hints
+    hints_left = await game.hints_left(started.game) > 0
     try:
         async with ChatActionSender.upload_document(chat_id=message.chat.id, bot=bot):
             await audio.send(
@@ -69,14 +69,14 @@ async def hint(callback: CallbackQuery, game: GameService) -> None:
     if result.game is None:
         await callback.answer(texts.NO_ACTIVE_GAME, show_alert=True)
         return
-    if result.text is None:
+    if result.hint is None:
         await callback.answer(texts.NO_MORE_HINTS, show_alert=True)
         return
     await callback.answer()
     if isinstance(callback.message, Message):
         if not result.hints_left:
             await callback.message.edit_reply_markup(reply_markup=keyboards.game(hints_left=False))
-        await callback.message.answer(texts.hint(result.text, result.hints_left))
+        await callback.message.answer(texts.hint(result.hint, result.hints_left))
 
 
 async def surrender(callback: CallbackQuery, game: GameService, repos: Repos) -> None:

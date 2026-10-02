@@ -37,25 +37,23 @@ def main_menu() -> ReplyKeyboardMarkup:
     )
 
 
-def search_button(text: str = "🔎 Поиск по архиву") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=text, switch_inline_query_current_chat="")]]
-    )
+def search_button() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[catalog_search_button()]])
 
 
 def game(*, hints_left: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🔎 Угадать", switch_inline_query_current_chat="")
+    kb.button(text=texts.BTN_GUESS, switch_inline_query_current_chat="")
     if hints_left:
-        kb.button(text="💡 Подсказка", callback_data=GameCb(act=GameAct.HINT))
-    kb.button(text="🏳 Сдаться", callback_data=GameCb(act=GameAct.SURRENDER))
+        kb.button(text=texts.BTN_HINT, callback_data=GameCb(act=GameAct.HINT))
+    kb.button(text=texts.BTN_SURRENDER, callback_data=GameCb(act=GameAct.SURRENDER))
     kb.adjust(1, 2)
     return kb.as_markup()
 
 
 def after_game(episode_id: int, *, is_favourite: bool) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🎲 Следующая загадка", callback_data=GameCb(act=GameAct.NEXT))
+    kb.button(text=texts.BTN_NEXT, callback_data=GameCb(act=GameAct.NEXT))
     kb.button(text=fav_label(is_favourite), callback_data=FavCb(episode_id=episode_id))
     kb.adjust(1)
     return kb.as_markup()
@@ -112,7 +110,7 @@ def fav_label(is_favourite: bool) -> str:
 
 def catalog_search_button() -> InlineKeyboardButton:
     return InlineKeyboardButton(
-        text="🔎 Найти в каталоге", switch_inline_query_current_chat=texts.CATALOG_INLINE_PREFIX
+        text=texts.BTN_SEARCH, switch_inline_query_current_chat=texts.CATALOG_INLINE_PREFIX
     )
 
 

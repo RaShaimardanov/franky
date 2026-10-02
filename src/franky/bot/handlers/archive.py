@@ -18,7 +18,7 @@ from franky.bot import keyboards, texts
 from franky.bot.callbacks import CharacterCb, EpisodeCb, FavCb, FavPageCb
 from franky.bot.handlers.game import handle_guess
 from franky.db.models import Character
-from franky.db.repositories import Repos
+from franky.db.repositories import ContentHit, Repos
 from franky.services.audio import AudioSender, AudioUnavailableError
 from franky.services.game import GameService
 
@@ -40,9 +40,19 @@ async def inline_search(query: InlineQuery, repos: Repos) -> None:
         text = text[len(texts.CATALOG_INLINE_PREFIX.strip()) :]
     mark = texts.CATALOG_MARK if in_catalog else ""
 
+    text = text[:MAX_QUERY]
     offset = int(query.offset or 0)
-    found = await repos.characters.search(text[:MAX_QUERY], limit=INLINE_PAGE, offset=offset)
-    results = [
+    results: list[InlineQueryResultArticle] = []
+    if not in_catalog:
+        found = await repos.characters.search(text, limit=INLINE_PAGE, offset=offset)
+        has_more = len(found) == INLINE_PAGE
+    else:
+        # В каталоге: сначала совпадения по именам (на первой странице), затем — по содержанию.
+        found = await repos.characters.search(text, limit=10) if offset == 0 else []
+        hits = await repos.transcripts.search(text, limit=INLINE_PAGE, offset=offset)
+        has_more = len(hits) == INLINE_PAGE
+        results += [_content_result(hit) for hit in hits]
+    results[:0] = [
         InlineQueryResultArticle(
             id=f"{'c' if in_catalog else 'g'}{character.id}",
             title=character.name,
@@ -55,7 +65,18 @@ async def inline_search(query: InlineQuery, repos: Repos) -> None:
         results,  # type: ignore[arg-type]
         cache_time=300,
         is_personal=False,
-        next_offset=str(offset + INLINE_PAGE) if len(found) == INLINE_PAGE else "",
+        next_offset=str(offset + INLINE_PAGE) if has_more else "",
+    )
+
+
+def _content_result(hit: ContentHit) -> InlineQueryResultArticle:
+    episode = hit.episode
+    name = episode.character.name if episode.character else episode.title
+    return InlineQueryResultArticle(
+        id=f"t{episode.id}",
+        title=f"🎧 {texts.episode_button(episode)}",
+        description=f"…{hit.snippet}…",
+        input_message_content=InputTextMessageContent(message_text=texts.CATALOG_MARK + name),
     )
 
 
@@ -81,7 +102,7 @@ async def play_episode(
 ) -> None:
     active = await game.active(callback.from_user.id)
     if active and active.episode_id == callback_data.episode_id:
-        await callback.answer("Это твоя текущая загадка — сначала разгадай её 😉", show_alert=True)
+        await callback.answer(texts.CURRENT_RIDDLE, show_alert=True)
         return
     episode = await repos.episodes.get(callback_data.episode_id)
     if episode is None:
@@ -165,6 +186,10 @@ async def free_text(message: Message, repos: Repos, game: GameService) -> None:
         if found_exact and (character := await repos.characters.get(found_exact.id)):
             await _send_card(message, character)
             return
+        # Выпуск без персонажа (праздничный, фрагмент) — показываем его самого.
+        if special := await repos.episodes.by_title(name):
+            await message.answer(texts.CONTENT_RESULTS, reply_markup=keyboards.episodes([special]))
+            return
 
     query = message.text.strip()[:MAX_QUERY]
     if await handle_guess(message, query, game, repos):
@@ -174,10 +199,14 @@ async def free_text(message: Message, repos: Repos, game: GameService) -> None:
         found = [exact]
     else:
         found = list(await repos.characters.search(query, limit=10))
-    if not found:
-        await message.answer(texts.search_empty(query), reply_markup=keyboards.search_button())
+    if found:
+        await message.answer(texts.SEARCH_RESULTS, reply_markup=keyboards.characters(found))
         return
-    await message.answer(texts.SEARCH_RESULTS, reply_markup=keyboards.characters(found))
+    if hits := await repos.transcripts.search(query, limit=10):
+        episodes = [hit.episode for hit in hits]
+        await message.answer(texts.CONTENT_RESULTS, reply_markup=keyboards.episodes(episodes))
+        return
+    await message.answer(texts.search_empty(query), reply_markup=keyboards.search_button())
 
 
 def create_router() -> Router:

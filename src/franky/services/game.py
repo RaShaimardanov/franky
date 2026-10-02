@@ -37,10 +37,24 @@ class GuessResult:
     attempts_left: int = 0
 
 
+class HintKind(StrEnum):
+    QUOTE = auto()  # цитата из выпуска
+    YEAR = auto()  # год эфира
+    LETTER = auto()  # первая буква и длина фамилии
+
+
+@dataclass(frozen=True, slots=True)
+class Hint:
+    kind: HintKind
+    text: str  # цитата, год или буква
+    letters: int = 0
+    is_surname: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class HintResult:
     game: Game | None
-    text: str | None
+    hint: Hint | None
     hints_left: int
 
 
@@ -90,13 +104,21 @@ class GameService:
         game = await self._repos.games.active(user_id, for_update=True)
         if game is None:
             return HintResult(None, None, 0)
-        if game.hints_used >= self._settings.max_hints:
+        hints = await self._hints_for(game)
+        if game.hints_used >= len(hints):
             return HintResult(game, None, 0)
 
+        hint = hints[game.hints_used]
         game.hints_used += 1
-        character = self._character_of(game)
-        text = build_hint(game.hints_used, game.episode, character)
-        return HintResult(game, text, self._settings.max_hints - game.hints_used)
+        return HintResult(game, hint, len(hints) - game.hints_used)
+
+    async def hints_left(self, game: Game) -> int:
+        return max(0, len(await self._hints_for(game)) - game.hints_used)
+
+    async def _hints_for(self, game: Game) -> list[Hint]:
+        quotes = await self._repos.transcripts.quotes(game.episode_id)
+        hints = build_hints(game.episode, self._character_of(game), quotes, seed=game.id)
+        return hints[: self._settings.max_hints]
 
     async def surrender(self, user_id: int) -> Game | None:
         game = await self._repos.games.active(user_id, for_update=True)
@@ -117,12 +139,22 @@ class GameService:
         game.finished_at = datetime.now(UTC)
 
 
-def build_hint(number: int, episode: Episode, character: Character) -> str:
-    if number == 1:
-        if episode.aired_year:
-            return f"Выпуск вышел в эфир в {episode.aired_year} году."
-        number = 2  # года нет — сразу вторая подсказка
+def build_hints(
+    episode: Episode, character: Character, quotes: list[str], *, seed: int
+) -> list[Hint]:
+    """Подсказки от самой туманной к самой прямой: цитата → год эфира → первая буква."""
+    hints = []
+    if quotes:
+        hints.append(Hint(HintKind.QUOTE, quotes[seed % len(quotes)]))
+    if episode.aired_year:
+        hints.append(Hint(HintKind.YEAR, str(episode.aired_year)))
     word = character.surname or character.name
-    letters = sum(ch.isalpha() for ch in word)
-    what = "Фамилия" if character.surname else "Имя"
-    return f"{what} начинается на «{word[0].upper()}», букв в ней — {letters}."
+    hints.append(
+        Hint(
+            HintKind.LETTER,
+            word[0].upper(),
+            letters=sum(ch.isalpha() for ch in word),
+            is_surname=character.surname is not None,
+        )
+    )
+    return hints

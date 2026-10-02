@@ -16,6 +16,7 @@ from franky.db.models import (
     Game,
     GameStatus,
     Guess,
+    Transcript,
     User,
 )
 from franky.domain.names import normalize
@@ -128,6 +129,9 @@ class EpisodeRepo:
         )
         episode = (await self.session.scalars(base.where(Episode.id.not_in(played)))).first()
         return episode or (await self.session.scalars(base)).first()
+
+    async def by_title(self, title: str) -> Episode | None:
+        return (await self.session.scalars(select(Episode).where(Episode.title == title))).first()
 
     async def set_file_id(self, episode_id: int, file_id: str) -> None:
         episode = await self.session.get(Episode, episode_id)
@@ -267,6 +271,55 @@ class FavouriteRepo:
         return list((await self.session.scalars(stmt)).all()), total or 0
 
 
+@dataclass(frozen=True, slots=True)
+class ContentHit:
+    episode: Episode
+    snippet: str
+
+
+class TranscriptRepo:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def upsert(self, episode_id: int, text: str, quotes: list[str]) -> None:
+        stmt = insert(Transcript).values(episode_id=episode_id, text=text, quotes=quotes)
+        await self.session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[Transcript.episode_id],
+                set_={"text": stmt.excluded.text, "quotes": stmt.excluded.quotes},
+            )
+        )
+
+    async def quotes(self, episode_id: int) -> list[str]:
+        found = await self.session.scalar(
+            select(Transcript.quotes).where(Transcript.episode_id == episode_id)
+        )
+        return list(found or [])
+
+    async def search(self, query: str, *, limit: int = 10, offset: int = 0) -> list[ContentHit]:
+        """Полнотекстовый поиск по расшифровкам («джинн лампа», «Мулен Руж»)."""
+        if not query.strip():
+            return []
+        tsquery = func.websearch_to_tsquery("russian", query)
+        rank = func.ts_rank_cd(Transcript.search, tsquery)
+        snippet = func.ts_headline(
+            "russian",
+            Transcript.text,
+            tsquery,
+            "MaxWords=18, MinWords=8, MaxFragments=1, StartSel=«, StopSel=»",
+        )
+        stmt = (
+            select(Episode, snippet)
+            .join(Transcript, Transcript.episode_id == Episode.id)
+            .where(Transcript.search.op("@@")(tsquery))
+            .order_by(rank.desc(), Episode.site_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [ContentHit(episode=row[0], snippet=row[1]) for row in rows]
+
+
 class Repos:
     """Набор репозиториев поверх одной сессии (одной транзакции)."""
 
@@ -277,3 +330,4 @@ class Repos:
         self.episodes = EpisodeRepo(session)
         self.games = GameRepo(session)
         self.favourites = FavouriteRepo(session)
+        self.transcripts = TranscriptRepo(session)

@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import structlog
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart, ExceptionTypeFilter
-from aiogram.types import ErrorEvent, Message
+from aiogram.types import ErrorEvent, FSInputFile, Message
 
 from franky.bot import keyboards, texts
 from franky.config import Settings
@@ -10,11 +12,20 @@ from franky.db.repositories import Repos
 log = structlog.get_logger(__name__)
 
 
+WELCOME_IMAGE = Path(__file__).resolve().parent.parent.parent / "assets" / "welcome.jpg"
+_welcome_file_id: str | None = None  # после первой отправки шлём картинку по file_id
+
+
 async def start(message: Message, settings: Settings) -> None:
-    await message.answer(
-        texts.start(settings.game.max_attempts), reply_markup=keyboards.main_menu()
+    global _welcome_file_id
+    sent = await message.answer_photo(
+        _welcome_file_id or FSInputFile(WELCOME_IMAGE),
+        caption=texts.start(settings.game.max_attempts),
+        reply_markup=keyboards.main_menu(),
     )
-    await message.answer("Ищи персонажей прямо из чата:", reply_markup=keyboards.search_button())
+    if sent.photo:
+        _welcome_file_id = sent.photo[-1].file_id
+    await message.answer(texts.SEARCH_PROMPT, reply_markup=keyboards.search_button())
 
 
 async def stats(message: Message, repos: Repos) -> None:

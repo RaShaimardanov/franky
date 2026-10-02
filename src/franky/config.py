@@ -27,7 +27,7 @@ class CatalogSettings(BaseModel):
 
 class GameSettings(BaseModel):
     max_attempts: int = 3
-    max_hints: int = 2
+    max_hints: int = 3
 
 
 # env_ignore_empty: пустая переменная (Coolify передаёт незаполненные как "") = не задана.

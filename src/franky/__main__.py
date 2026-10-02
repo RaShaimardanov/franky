@@ -4,6 +4,7 @@ franky bot                    запустить бота (long polling)
 franky sync                   обновить каталог выпусков с fshow.info
 franky download [--limit N]   докачать mp3 для выпусков без файла (большие сразу сжимаются)
 franky compress               сжать уже скачанные mp3 больше лимита Bot API (50 МБ)
+franky transcripts DIR        загрузить расшифровки выпусков (JSON) для подсказок и поиска
 franky upload                 заранее залить аудио в Telegram и сохранить file_id
 """
 
@@ -67,6 +68,16 @@ async def run_compress(
     log.info("compress_finished", compressed=done)
 
 
+async def run_transcripts(
+    settings: Settings, session_factory: SessionFactory, args: argparse.Namespace
+) -> None:
+    from pathlib import Path
+
+    from franky.catalog.transcripts import import_transcripts
+
+    await import_transcripts(session_factory, Path(args.directory))
+
+
 async def run_upload(
     settings: Settings, session_factory: SessionFactory, _: argparse.Namespace
 ) -> None:
@@ -101,6 +112,7 @@ COMMANDS: dict[str, Command] = {
     "sync": run_sync,
     "download": run_download,
     "compress": run_compress,
+    "transcripts": run_transcripts,
     "upload": run_upload,
 }
 
@@ -113,6 +125,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     download = sub.add_parser("download", help="докачать недостающие mp3")
     download.add_argument("--limit", type=int, default=None, help="не больше N файлов")
     sub.add_parser("compress", help="сжать mp3 больше 50 МБ")
+    transcripts = sub.add_parser("transcripts", help="загрузить расшифровки выпусков")
+    transcripts.add_argument("directory", help="папка с файлами <site_id>.json")
     sub.add_parser("upload", help="заранее загрузить аудио в Telegram")
     return parser.parse_args(argv)
 

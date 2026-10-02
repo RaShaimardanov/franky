@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     BigInteger,
+    Computed,
     Date,
     DateTime,
     Enum,
@@ -15,7 +16,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING_CONVENTION = {
@@ -162,3 +163,20 @@ class Favourite(TimestampMixin, Base):
     )
 
     episode: Mapped[Episode] = relationship(lazy="joined")
+
+
+class Transcript(Base):
+    """Расшифровка выпуска (Whisper): полнотекстовый поиск и цитаты для подсказок."""
+
+    __tablename__ = "transcripts"
+    __table_args__ = (Index("ix_transcripts_search", "search", postgresql_using="gin"),)
+
+    episode_id: Mapped[int] = mapped_column(
+        ForeignKey("episodes.id", ondelete="CASCADE"), primary_key=True
+    )
+    text: Mapped[str] = mapped_column(Text)
+    # Фразы без имени персонажа, отобранные для подсказок.
+    quotes: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    search: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('russian', text)", persisted=True)
+    )
